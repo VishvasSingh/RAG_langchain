@@ -4,8 +4,8 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.embeddings.fastembed import FastEmbedEmbeddings
 from langchain_community.document_loaders import PDFPlumberLoader
 from langchain_community.vectorstores import Chroma
-from langchain.chains.question_answering import load_qa_chain
 from langchain.prompts import PromptTemplate
+from langchain.chains import RetrievalQA
 
 app = Flask(__name__)
 llm = Ollama(model="llama3")
@@ -18,15 +18,16 @@ text_splitter = RecursiveCharacterTextSplitter(
 
 base_template = PromptTemplate.from_template(
     """
-    
+    <s> [INST]
     You are a technical assistant good at searching documents. Your task is to answer based on the context provided to
-    you. If you don't know the answer say "Nahi pata bhaiya sorry"
+    you. If you don't know the answer say "Nahi pata bhaiya sorry" [/INST] </s>
     [INST] {input}
             Context: {context}
             Answer: 
     [/INST]
     """
 )
+
 
 @app.route("/ai", methods=["POST"])
 def ai_post():
@@ -48,21 +49,20 @@ def ai_pdf_post():
     query = json_content.get("query")
     print(f"query: {query}")
 
-    print('loading verctor store')
-    vector_store = Chroma(persist_directory=VECTOR_STORE_PATH, embedding_function=embedding)
+    print("loading vector store")
+    vector_store = Chroma(
+        persist_directory=VECTOR_STORE_PATH, embedding_function=embedding
+    )
 
     print("Creating chain")
     retriever = vector_store.as_retriever(
-        search_type = 'similarity_score_threshold',
-        search_kwargs = {
-            'k': 20,
-            'score_threshold': 0.1
-        }
+        search_type="similarity_score_threshold",
+        search_kwargs={"k": 20, "score_threshold": 0.1},
     )
 
-    chain = load_qa_chain(llm=llm, chain_type="stuff")
+    qa_chain = RetrievalQA.from_chain_type(llm=llm, chain_type="stuff", retriever=retriever)
 
-    response = llm.invoke(query)
+    response = qa_chain.invoke(query)
 
     return response
 
