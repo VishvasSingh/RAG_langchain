@@ -6,18 +6,19 @@ from langchain_community.document_loaders import PDFPlumberLoader
 from langchain_community.vectorstores import Chroma
 from langchain.prompts import PromptTemplate
 from langchain.chains import RetrievalQA
+from langchain.chains.retrieval_qa.base import RetrievalQA
+from langchain.globals import set_debug
 
 app = Flask(__name__)
 llm = Ollama(model="llama3")
 VECTOR_STORE_PATH = "vector_db"
-
+set_debug(True)
 embedding = FastEmbedEmbeddings()
 text_splitter = RecursiveCharacterTextSplitter(
     chunk_size=1024, chunk_overlap=80, length_function=len, is_separator_regex=False
 )
 
-base_template = PromptTemplate.from_template(
-    """
+base_template = """
     <s> [INST]
     You are a technical assistant good at searching documents. Your task is to answer based on the context provided to
     you. If you don't know the answer say "Nahi pata bhaiya sorry" [/INST] </s>
@@ -26,7 +27,7 @@ base_template = PromptTemplate.from_template(
             Answer: 
     [/INST]
     """
-)
+
 
 
 @app.route("/ai", methods=["POST"])
@@ -60,9 +61,14 @@ def ai_pdf_post():
         search_kwargs={"k": 20, "score_threshold": 0.1},
     )
 
-    qa_chain = RetrievalQA.from_chain_type(llm=llm, chain_type="stuff", retriever=retriever)
+    prompt = PromptTemplate(template=base_template, input_variables=["input", "context"])
 
-    response = qa_chain.invoke(query)
+    qa_chain = RetrievalQA.from_chain_type(llm=llm, chain_type="stuff", retriever=retriever, chain_type_kwargs={
+        "prompt": prompt,
+        "verbose": True,
+    })
+
+    response = qa_chain.invoke({"qyery": query})
 
     return response
 
